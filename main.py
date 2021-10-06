@@ -4,14 +4,14 @@ import time
 import random
 import wandb
 from UNet import UNet
-from ZUNet_v1 import ZUNet_v1
-from engine import Segmentor, Segmentor_z
+from ZUNet_v1 import ZUNet_v1, ZUNet_v2
+from engine import Segmentor, Segmentor_z, Segmentor_z_v2
 from torch.optim.lr_scheduler import (
     CosineAnnealingWarmRestarts,
     CosineAnnealingLR,
     ReduceLROnPlateau,
 )
-from dataloader import prep_dataloader, prep_dataloader_z
+from dataloader import prep_dataloader, prep_dataloader_z, prep_dataloader_multiC_z
 
 import numpy as np
 from torch import nn
@@ -39,8 +39,8 @@ def seed_everything(seed=42):
 
 def wandb_config():
     project = "silicosis"
-    run_name = "ZUNet_64_multiC_lung"
-    debug = False
+    run_name = "ZUNet_v1_multiC_lung_n64"
+    debug = True
     if debug:
         project = "debug"
 
@@ -55,7 +55,7 @@ def wandb_config():
         # n_case = 0 to run all cases
         config.n_case = 64
 
-    config.save = True
+    config.save = False
 
     config.data_path = os.getenv("VIDA_PATH")
     config.in_file = "ENV18PM_ProjSubjList_cleaned_IN.in"
@@ -65,7 +65,7 @@ def wandb_config():
 
     # config.mask = 'airway'
     config.mask = "lung"
-    config.model = "ZUNet_multiC"
+    config.model = "ZUNet_v1_multiC"
     config.activation = "leakyrelu"
     config.optimizer = "adam"
     config.scheduler = "CosineAnnealingWarmRestarts"
@@ -88,8 +88,9 @@ if __name__ == "__main__":
 
     scaler = amp.GradScaler()
     if config.Z:
-        train_loader, valid_loader = prep_dataloader_z(config)
+        train_loader, valid_loader = prep_dataloader_multiC_z(config)
         model = ZUNet_v1(in_channels=3)
+        # model = ZUNet_v2(in_channels=1)
         model.to(config.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
         scheduler = CosineAnnealingWarmRestarts(
@@ -130,17 +131,19 @@ if __name__ == "__main__":
     # Train
     wandb.watch(eng.model, log="all", log_freq=10)
     for epoch in range(config.epochs):
-        trn_loss, trn_dice_loss, trn_bce_loss = eng.train(train_loader)
-        val_loss, val_dice_loss, val_bce_loss = eng.evaluate(valid_loader)
+        trn_loss, trn_dice_loss, trn_bce_loss, trn_cls_loss = eng.train(train_loader)
+        val_loss, val_dice_loss, val_bce_loss, val_cls_loss = eng.evaluate(valid_loader)
         wandb.log(
             {
                 "epoch": epoch,
                 "trn_loss": trn_loss,
                 "trn_dice_loss": trn_dice_loss,
                 "trn_bce_loss": trn_bce_loss,
+                "trn_cls_loss": trn_cls_loss,
                 "val_loss": val_loss,
                 "val_dice_loss": val_dice_loss,
                 "val_bce_loss": val_bce_loss,
+                "val_cls_loss": val_cls_loss,
             }
         )
 

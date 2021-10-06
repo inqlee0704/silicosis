@@ -191,20 +191,20 @@ class SegDataset_multiC_withZ:
             self.img, self.hdr = load(self.img_paths[slc[0]])
             # some background values are set to -3024
             self.img[self.img < -1024] = -1024
-            self.airway_c = np.copy(self.img)
-            self.tissue_c = np.copy(self.img)
-            self.airway_c[self.airway_c >= -800] = -800
-            self.tissue_c[self.tissue_c <= -200] = -200
-            self.tissue_c[self.tissue_c >= 200] = 200
+            self.narrow_c = np.copy(self.img)
+            self.wide_c = np.copy(self.img)
+            self.narrow_c[self.narrow_c >= -500] = -500
+            # self.wide_c[self.wide_c <= -200] = -200
+            self.wide_c[self.wide_c >= 300] = 300
 
             self.img = (self.img - np.min(self.img)) / (
                 np.max(self.img) - np.min(self.img)
             )
-            self.tissue_c = (self.tissue_c - np.min(self.tissue_c)) / (
-                np.max(self.tissue_c) - np.min(self.tissue_c)
+            self.wide_c = (self.wide_c - np.min(self.wide_c)) / (
+                np.max(self.wide_c) - np.min(self.wide_c)
             )
-            self.airway_c = (self.airway_c - np.min(self.airway_c)) / (
-                np.max(self.airway_c) - np.min(self.airway_c)
+            self.narrow_c = (self.narrow_c - np.min(self.narrow_c)) / (
+                np.max(self.narrow_c) - np.min(self.narrow_c)
             )
 
             self.mask, _ = load(self.mask_paths[slc[0]])
@@ -223,17 +223,17 @@ class SegDataset_multiC_withZ:
         # z ranges from 0 to 9
         z = np.floor(z * 10)
 
-        airway_c = self.airway_c[:, :, slc[1]]
-        tissue_c = self.tissue_c[:, :, slc[1]]
+        narrow_c = self.narrow_c[:, :, slc[1]]
+        wide_c = self.wide_c[:, :, slc[1]]
         img = self.img[:, :, slc[1]]
         mask = self.mask[:, :, slc[1]]
         mask = mask.astype(int)
 
-        airway_c = airway_c[None, :]
-        tissue_c = tissue_c[None, :]
+        narrow_c = narrow_c[None, :]
+        wide_c = wide_c[None, :]
         img = img[None, :]
         mask = mask[None, :]
-        img = np.concatenate([img, airway_c, tissue_c], axis=0)
+        img = np.concatenate([img, narrow_c, wide_c], axis=0)
 
         if self.augmentations is not None:
             augmented = self.augmentations(image=img, mask=mask)
@@ -495,6 +495,38 @@ def prep_dataloader_z(c):
 
     train_slices = slice_loader(df_train)
     valid_slices = slice_loader(df_valid)
+    train_ds = SegDataset_withZ(
+        df_train, train_slices, mask_name=c.mask, augmentations=get_train_aug()
+    )
+    valid_ds = SegDataset_withZ(df_valid, valid_slices, mask_name=c.mask)
+
+    train_loader = DataLoader(
+        train_ds, batch_size=c.train_bs, shuffle=False, num_workers=0
+    )
+    valid_loader = DataLoader(
+        valid_ds, batch_size=c.valid_bs, shuffle=False, num_workers=0
+    )
+
+    return train_loader, valid_loader
+
+
+def prep_dataloader_multiC_z(c):
+    # n_case: load n number of cases, 0: load all
+    df_subjlist = pd.read_csv(os.path.join(c.data_path, c.in_file), sep="\t")
+    n_case = c.n_case
+    if n_case == 0:
+        df_train, df_valid = model_selection.train_test_split(
+            df_subjlist, test_size=0.2, random_state=42, stratify=None
+        )
+    else:
+        df_train, df_valid = model_selection.train_test_split(
+            df_subjlist[:n_case], test_size=0.2, random_state=42, stratify=None
+        )
+    df_train = df_train.reset_index(drop=True)
+    df_valid = df_valid.reset_index(drop=True)
+
+    train_slices = slice_loader(df_train)
+    valid_slices = slice_loader(df_valid)
     train_ds = SegDataset_multiC_withZ(
         df_train, train_slices, mask_name=c.mask, augmentations=get_train_aug()
     )
@@ -513,7 +545,7 @@ def prep_dataloader_z(c):
 def get_train_aug():
     return A.Compose(
         [
-            A.Rotate(limit=10),
+            A.Rotate(limit=15),
             A.OneOf(
                 [
                     A.HorizontalFlip(),

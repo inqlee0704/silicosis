@@ -4,10 +4,10 @@ import torch.nn as nn
 
 def double_conv(in_c, out_c):
     conv = nn.Sequential(
-        nn.Conv2d(in_c, out_c, kernel_size=3, padding=1),
+        nn.Conv2d(in_c, out_c, kernel_size=3, padding=1, padding_mode="reflect"),
         nn.InstanceNorm2d(out_c),
         nn.LeakyReLU(inplace=True),
-        nn.Conv2d(out_c, out_c, kernel_size=3, padding=1),
+        nn.Conv2d(out_c, out_c, kernel_size=3, padding=1, padding_mode="reflect"),
         nn.InstanceNorm2d(out_c),
         nn.LeakyReLU(inplace=True),
     )
@@ -90,8 +90,9 @@ class ZUNet_v1(nn.Module):
 
 class ZUNet_v2(nn.Module):
     def __init__(self, in_channels=1):
-        super(ZUNet_v1, self).__init__()
+        super(ZUNet_v2, self).__init__()
         self.max_pool_2x2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.max_pool_8x8 = nn.MaxPool2d(kernel_size=8, stride=8)
         self.down_conv_1 = double_conv(in_channels, 64)
         self.down_conv_2 = double_conv(64, 128)
         self.down_conv_3 = double_conv(128, 256)
@@ -99,11 +100,7 @@ class ZUNet_v2(nn.Module):
         self.down_conv_5 = double_conv(512, 1024)
 
         self.up_trans_1 = nn.ConvTranspose2d(
-            # in_channels=1024,
-            in_channels=1034,
-            out_channels=512,
-            kernel_size=2,
-            stride=2,
+            in_channels=1024, out_channels=512, kernel_size=2, stride=2
         )
         self.up_conv_1 = double_conv(1024, 512)
         self.up_trans_2 = nn.ConvTranspose2d(
@@ -120,7 +117,13 @@ class ZUNet_v2(nn.Module):
         self.up_conv_4 = double_conv(128, 64)
         self.out = nn.Conv2d(in_channels=64, out_channels=1, kernel_size=1)
 
-    def forward(self, image, z):
+        self.preclassifier = nn.Sequential(
+            nn.Conv2d(in_channels=1024, out_channels=512, kernel_size=1),
+            nn.LeakyReLU(inplace=True),
+        )
+        self.classifier = nn.Linear(in_features=8192, out_features=10)
+
+    def forward(self, image):
         # encoder
         x1 = self.down_conv_1(image)  # ---->
         x2 = self.max_pool_2x2(x1)
@@ -132,12 +135,12 @@ class ZUNet_v2(nn.Module):
         x8 = self.max_pool_2x2(x7)
         x9 = self.down_conv_5(x8)
 
-        # add z
-        one_hot_z = nn.functional.one_hot(z, num_classes=10)
-        one_hot_z = torch.unsqueeze(torch.unsqueeze(one_hot_z, -1), -1)
-        x9_z = torch.cat([x9, one_hot_z.repeat(1, 1, 32, 32)], dim=1)
+        x10 = self.max_pool_8x8(x9)
+        preclassifier = self.preclassifier(x10)
+        z = self.classifier(preclassifier.view(-1, 512 * 4 * 4))
+
         # decoder
-        x = self.up_trans_1(x9_z)
+        x = self.up_trans_1(x9)
         y = crop_img(x7, x)
         x = self.up_conv_1(torch.cat([x, y], 1))
         x = self.up_trans_2(x)
@@ -150,4 +153,4 @@ class ZUNet_v2(nn.Module):
         y = crop_img(x1, x)
         x = self.up_conv_4(torch.cat([x, y], 1))
         x = self.out(x)
-        return x
+        return x, z

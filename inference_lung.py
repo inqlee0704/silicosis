@@ -54,7 +54,8 @@ if __name__ == "__main__":
     infer_list = pd.read_csv(infer_path)
     parameter_path = (
         # "/data1/inqlee0704/silicosis/RESULTS/UNet_64_20211002/lung_UNet.pth"
-        "/data1/inqlee0704/silicosis/RESULTS/ZUNet_64_lung_20211001/ZUNet_lung.pth"
+        # "/data1/inqlee0704/silicosis/RESULTS/ZUNet_64_lung_20211001/ZUNet_lung.pth"
+        "/data1/inqlee0704/silicosis/RESULTS/ZUNet_128_lung_20211004/ZUNet_lung.pth"
     )
     # parameter_path = '/home/inqlee0704/src/DL/airway/RESULTS/Recursive_UNet_v2_20201216/model.pth'
     # model = UNet()
@@ -72,7 +73,7 @@ if __name__ == "__main__":
         pair_img = nib.Nifti1Pair(pred_label, np.eye(4), hdr)
         nib.save(
             pair_img,
-            "data/lung_mask/ZUNet_n64/"
+            "data/lung_mask/ZUNet_n128/"
             + str(infer_list.loc[i, "ImgDir"][-9:-7])
             + ".img.gz",
         )
