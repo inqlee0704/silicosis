@@ -42,8 +42,8 @@ def seed_everything(seed=42):
 
 def wandb_config():
     project = "silicosis"
-    run_name = "ZUNet_v1_multiC_lung_n64"
-    debug = False
+    run_name = "ZUNet_v1_lung"
+    debug = True
     if debug:
         project = "debug"
 
@@ -58,7 +58,7 @@ def wandb_config():
         # n_case = 0 to run all cases
         config.n_case = 64
 
-    config.save = True
+    config.save = False
 
     config.data_path = os.getenv("VIDA_PATH")
     config.in_file = "ENV18PM_ProjSubjList_cleaned_IN.in"
@@ -84,7 +84,7 @@ def wandb_config():
     return config
 
 
-def prep_test_img(multiC=True):
+def prep_test_img(multiC=False):
     # Test
     test_img, _ = load("/data1/inqlee0704/silicosis/data/inputs/02_ct.hdr")
     test_img[test_img < -1024] = -1024
@@ -106,7 +106,7 @@ def prep_test_img(multiC=True):
     return test_img
 
 
-def volume_inference_multiC_z(model, volume, threshold=0.5):
+def volume_inference_z(model, volume, threshold=0.5):
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     slices = np.zeros((512, 512, volume.shape[-1]))
     for i in range(volume.shape[-1]):
@@ -163,8 +163,8 @@ if __name__ == "__main__":
 
     scaler = amp.GradScaler()
     if config.Z:
-        train_loader, valid_loader = prep_dataloader_multiC_z(config)
-        model = ZUNet_v1(in_channels=3)
+        train_loader, valid_loader = prep_dataloader_z(config)
+        model = ZUNet_v1(in_channels=1)
         # model = ZUNet_v2(in_channels=1)
         model.to(config.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
@@ -204,7 +204,7 @@ if __name__ == "__main__":
 
     best_loss = np.inf
     # Train
-    test_img = prep_test_img(multiC=True)
+    test_img = prep_test_img(multiC=False)
     wandb.watch(eng.model, log="all", log_freq=10)
     for epoch in range(config.epochs):
         trn_loss, trn_dice_loss, trn_bce_loss = eng.train(train_loader)
@@ -222,7 +222,7 @@ if __name__ == "__main__":
                 # "val_cls_loss": val_cls_loss,
             }
         )
-        test_pred = volume_inference_multiC_z(model, test_img, threshold=0.5)
+        test_pred = volume_inference_z(model, test_img, threshold=0.5)
         show_images(test_img, test_pred, epoch)
 
         if config.scheduler == "ReduceLROnPlateau":
