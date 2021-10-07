@@ -42,8 +42,8 @@ def seed_everything(seed=42):
 
 def wandb_config():
     project = "silicosis"
-    run_name = "ZUNet_v1_lung"
-    debug = True
+    run_name = "ZUNet_v1_lung_n64_20epoch"
+    debug = False
     if debug:
         project = "debug"
 
@@ -54,11 +54,11 @@ def wandb_config():
         config.epochs = 1
         config.n_case = 5
     else:
-        config.epochs = 30
+        config.epochs = 20
         # n_case = 0 to run all cases
         config.n_case = 64
 
-    config.save = False
+    config.save = True
 
     config.data_path = os.getenv("VIDA_PATH")
     config.in_file = "ENV18PM_ProjSubjList_cleaned_IN.in"
@@ -68,7 +68,7 @@ def wandb_config():
 
     # config.mask = 'airway'
     config.mask = "lung"
-    config.model = "ZUNet_v1_multiC"
+    config.model = "ZUNet_v1"
     config.activation = "leakyrelu"
     config.optimizer = "adam"
     config.scheduler = "CosineAnnealingWarmRestarts"
@@ -152,8 +152,10 @@ def show_images(test_img, test_pred, epoch):
     plt.title(f"Lung masks at {epoch}")
     plt.imshow(test_pred_grid.permute(1, 2, 0))
 
-    wandb.log({"plot": plt})
-    plt.close()
+    # wandb.log({"plot": plt})
+
+#    plt.close()
+    return plt
 
 
 if __name__ == "__main__":
@@ -200,7 +202,7 @@ if __name__ == "__main__":
         dirname = f'{config.name}_{time.strftime("%Y%m%d", time.gmtime())}'
         out_dir = os.path.join("RESULTS", dirname)
         os.makedirs(out_dir, exist_ok=True)
-        path = os.path.join(out_dir, f"{config.model}_{config.mask}.pth")
+        path = os.path.join(out_dir, f"{config.model}_{config.mask}")
 
     best_loss = np.inf
     # Train
@@ -209,6 +211,8 @@ if __name__ == "__main__":
     for epoch in range(config.epochs):
         trn_loss, trn_dice_loss, trn_bce_loss = eng.train(train_loader)
         val_loss, val_dice_loss, val_bce_loss = eng.evaluate(valid_loader)
+        test_pred = volume_inference_z(model, test_img, threshold=0.5)
+        plt = show_images(test_img, test_pred, epoch)
         wandb.log(
             {
                 "epoch": epoch,
@@ -219,11 +223,11 @@ if __name__ == "__main__":
                 "val_loss": val_loss,
                 "val_dice_loss": val_dice_loss,
                 "val_bce_loss": val_bce_loss,
+                "Plot": plt 
                 # "val_cls_loss": val_cls_loss,
             }
         )
-        test_pred = volume_inference_z(model, test_img, threshold=0.5)
-        show_images(test_img, test_pred, epoch)
+        plt.close()
 
         if config.scheduler == "ReduceLROnPlateau":
             scheduler.step(val_loss)
@@ -233,5 +237,7 @@ if __name__ == "__main__":
             best_loss = val_loss
             print(f"Best loss: {best_loss} at Epoch: {eng.epoch}")
             if config.save:
-                torch.save(model.state_dict(), path)
+                model_path = path + f'_{epoch}.pth'
+                torch.save(model.state_dict(), model_path)
                 wandb.save(path)
+
