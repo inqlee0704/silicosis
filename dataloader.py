@@ -404,16 +404,38 @@ def CT_loader(subjlist, mask_name=None):
     return np.array(out)
 
 
-def TE_loader(subjlist, mask_name=None):
+def TE_loader(subjlist, multi_c=False):
     print("Loading Data. . . ")
     dicom_paths = subjlist.loc[:, "ImgDir"].values
     out = []
-    for ii in range(len(dicom_paths)):
-        image, _ = load(dicom_paths[ii])
-        image[image < -1024] = -1024
-        image = (image - (np.min(image))) / ((np.max(image) - (np.min(image))))
-        out.append({"image": image})
-    return np.array(out)
+    if multi_c:
+        for ii in range(len(dicom_paths)):
+            raw_image, _ = load(dicom_paths[ii])
+            raw_image[raw_image < -1024] = -1024
+            image = np.copy(raw_image)
+            narrow_c = np.copy(raw_image)
+            wide_c = np.copy(raw_image)
+            narrow_c[narrow_c >= -500] = -500
+            wide_c[wide_c >= 300] = 300
+            image = (image - (np.min(image))) / ((np.max(image) - (np.min(image))))
+            narrow_c = (narrow_c - (np.min(narrow_c))) / (
+                (np.max(narrow_c) - (np.min(narrow_c)))
+            )
+            wide_c = (wide_c - (np.min(wide_c))) / ((np.max(wide_c) - (np.min(wide_c))))
+            image = image[None, :]
+            narrow_c = narrow_c[None, :]
+            wide_c = wide_c[None, :]
+            img_combined = np.concatenate([image, narrow_c, wide_c], axis=0)
+            out.append({"image": img_combined})
+        return np.array(out)
+    else:
+        for ii in range(len(dicom_paths)):
+            raw_image, _ = load(dicom_paths[ii])
+            raw_image[raw_image < -1024] = -1024
+            image = np.copy(raw_image)
+            image = (image - (np.min(image))) / ((np.max(image) - (np.min(image))))
+            out.append({"image": image})
+        return np.array(out)
 
 
 """
@@ -444,18 +466,8 @@ Prepare train & valid dataloaders
 
 def prep_dataloader(c):
     # n_case: load n number of cases, 0: load all
-    df_subjlist = pd.read_csv(os.path.join(c.data_path, c.in_file), sep="\t")
-    n_case = c.n_case
-    if n_case == 0:
-        df_train, df_valid = model_selection.train_test_split(
-            df_subjlist, test_size=0.2, random_state=42, stratify=None
-        )
-    else:
-        df_train, df_valid = model_selection.train_test_split(
-            df_subjlist[:n_case], test_size=0.2, random_state=42, stratify=None
-        )
-    df_train = df_train.reset_index(drop=True)
-    df_valid = df_valid.reset_index(drop=True)
+    df_train = pd.read_csv(os.path.join(c.data_path, c.in_file), sep="\t")
+    df_valid = pd.read_csv(os.path.join(c.data_path, c.in_file_valid), sep="\t")
 
     train_slices = slice_loader(df_train)
     valid_slices = slice_loader(df_valid)

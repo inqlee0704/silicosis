@@ -41,12 +41,9 @@ def cal_dice_loss(pred, target, smooth=1.0):
 def cal_loss(outputs, targets, bce_weight=0.5):
     BCE_fn = nn.BCEWithLogitsLoss()
     bce_loss = BCE_fn(outputs, targets)
-
     preds = torch.sigmoid(outputs)
     dice_loss = cal_dice_loss(preds, targets)
-
     loss = bce_loss * bce_weight + dice_loss * (1 - bce_weight)
-
     return loss, bce_loss, dice_loss
 
 

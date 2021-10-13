@@ -42,7 +42,7 @@ def seed_everything(seed=42):
 
 def wandb_config():
     project = "silicosis"
-    run_name = "ZUNet_v1_lung_n64_20epoch"
+    run_name = "UNet_lung_final"
     debug = False
     if debug:
         project = "debug"
@@ -56,19 +56,21 @@ def wandb_config():
     else:
         config.epochs = 20
         # n_case = 0 to run all cases
-        config.n_case = 64
+        config.n_case = 0
 
     config.save = True
 
     config.data_path = os.getenv("VIDA_PATH")
-    config.in_file = "ENV18PM_ProjSubjList_cleaned_IN.in"
+    config.in_file = "ENV18PM_ProjSubjList_sillicosis.in"
+    config.in_file_valid = "ENV18PM_ProjSubjList_sillicosis_valid.in"
+    # config.in_file = "ENV18PM_ProjSubjList_cleaned_IN.in"
     config.test_results_dir = "RESULTS"
     config.name = run_name
     config.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # config.mask = 'airway'
     config.mask = "lung"
-    config.model = "ZUNet_v1"
+    config.model = "UNet"
     config.activation = "leakyrelu"
     config.optimizer = "adam"
     config.scheduler = "CosineAnnealingWarmRestarts"
@@ -79,7 +81,7 @@ def wandb_config():
     config.train_bs = 8
     config.valid_bs = 16
     config.aug = True
-    config.Z = True
+    config.Z = False
 
     return config
 
@@ -126,6 +128,22 @@ def volume_inference_z(model, volume, threshold=0.5):
     return slices
 
 
+def volume_inference(model, volume, threshold=0.5):
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    slices = np.zeros((512, 512, volume.shape[-1]))
+    for i in range(volume.shape[-1]):
+        s = volume[:, :, :, i]
+        s = s.astype(np.single)
+        s = torch.from_numpy(s).unsqueeze(0)
+        pred = model(s.to(DEVICE))
+        pred = torch.sigmoid(pred)
+        pred = np.squeeze(pred.cpu().detach())
+        pred[pred > threshold] = 1
+        pred[pred <= threshold] = 0
+        slices[:, :, i] = pred * 255
+    return slices
+
+
 def show_images(test_img, test_pred, epoch):
     test_img = torch.from_numpy(test_img)
     test_img = test_img.permute(3, 0, 1, 2)
@@ -135,8 +153,6 @@ def show_images(test_img, test_pred, epoch):
     test_pred = torch.from_numpy(test_pred)
     test_pred = test_pred.permute(2, 0, 1)
     test_pred = test_pred.unsqueeze(1)
-    print(f"Test img: {test_img.shape}")
-    print(f"Test pred: {test_pred.shape}")
 
     test_img_grid = vutils.make_grid(test_img)
     test_pred_grid = vutils.make_grid(test_pred)
@@ -154,7 +170,7 @@ def show_images(test_img, test_pred, epoch):
 
     # wandb.log({"plot": plt})
 
-#    plt.close()
+    #    plt.close()
     return plt
 
 
@@ -165,8 +181,11 @@ if __name__ == "__main__":
 
     scaler = amp.GradScaler()
     if config.Z:
-        train_loader, valid_loader = prep_dataloader_z(config)
-        model = ZUNet_v1(in_channels=1)
+        # train_loader, valid_loader = prep_dataloader_z(config)
+        train_loader, valid_loader = prep_dataloader_multiC_z(config)
+        # batch = next(iter(train_loader))
+        # print(batch["image"].shape)
+        model = ZUNet_v1(in_channels=3)
         # model = ZUNet_v2(in_channels=1)
         model.to(config.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
@@ -202,7 +221,7 @@ if __name__ == "__main__":
         dirname = f'{config.name}_{time.strftime("%Y%m%d", time.gmtime())}'
         out_dir = os.path.join("RESULTS", dirname)
         os.makedirs(out_dir, exist_ok=True)
-        path = os.path.join(out_dir, f"{config.model}_{config.mask}")
+        path = os.path.join(out_dir, f"{config.name}")
 
     best_loss = np.inf
     # Train
@@ -211,7 +230,10 @@ if __name__ == "__main__":
     for epoch in range(config.epochs):
         trn_loss, trn_dice_loss, trn_bce_loss = eng.train(train_loader)
         val_loss, val_dice_loss, val_bce_loss = eng.evaluate(valid_loader)
-        test_pred = volume_inference_z(model, test_img, threshold=0.5)
+        if config.Z:
+            test_pred = volume_inference_z(model, test_img, threshold=0.5)
+        else:
+            test_pred = volume_inference(model, test_img, threshold=0.5)
         plt = show_images(test_img, test_pred, epoch)
         wandb.log(
             {
@@ -219,12 +241,10 @@ if __name__ == "__main__":
                 "trn_loss": trn_loss,
                 "trn_dice_loss": trn_dice_loss,
                 "trn_bce_loss": trn_bce_loss,
-                # "trn_cls_loss": trn_cls_loss,
                 "val_loss": val_loss,
                 "val_dice_loss": val_dice_loss,
                 "val_bce_loss": val_bce_loss,
-                "Plot": plt 
-                # "val_cls_loss": val_cls_loss,
+                "Plot": plt,
             }
         )
         plt.close()
@@ -237,7 +257,6 @@ if __name__ == "__main__":
             best_loss = val_loss
             print(f"Best loss: {best_loss} at Epoch: {eng.epoch}")
             if config.save:
-                model_path = path + f'_{epoch}.pth'
+                model_path = path + f"_{epoch}.pth"
                 torch.save(model.state_dict(), model_path)
                 wandb.save(path)
-
