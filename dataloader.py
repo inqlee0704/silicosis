@@ -492,18 +492,11 @@ def prep_dataloader(c):
 
 def prep_dataloader_z(c):
     # n_case: load n number of cases, 0: load all
-    df_subjlist = pd.read_csv(os.path.join(c.data_path, c.in_file), sep="\t")
-    n_case = c.n_case
-    if n_case == 0:
-        df_train, df_valid = model_selection.train_test_split(
-            df_subjlist, test_size=0.2, random_state=42, stratify=None
-        )
-    else:
-        df_train, df_valid = model_selection.train_test_split(
-            df_subjlist[:n_case], test_size=0.2, random_state=42, stratify=None
-        )
-    df_train = df_train.reset_index(drop=True)
-    df_valid = df_valid.reset_index(drop=True)
+    df_train = pd.read_csv(os.path.join(c.data_path, c.in_file), sep="\t")
+    df_valid = pd.read_csv(os.path.join(c.data_path, c.in_file_valid), sep="\t")
+
+    train_slices = slice_loader(df_train)
+    valid_slices = slice_loader(df_valid)
 
     train_slices = slice_loader(df_train)
     valid_slices = slice_loader(df_valid)
@@ -524,18 +517,11 @@ def prep_dataloader_z(c):
 
 def prep_dataloader_multiC_z(c):
     # n_case: load n number of cases, 0: load all
-    df_subjlist = pd.read_csv(os.path.join(c.data_path, c.in_file), sep="\t")
-    n_case = c.n_case
-    if n_case == 0:
-        df_train, df_valid = model_selection.train_test_split(
-            df_subjlist, test_size=0.2, random_state=42, stratify=None
-        )
-    else:
-        df_train, df_valid = model_selection.train_test_split(
-            df_subjlist[:n_case], test_size=0.2, random_state=42, stratify=None
-        )
-    df_train = df_train.reset_index(drop=True)
-    df_valid = df_valid.reset_index(drop=True)
+    df_train = pd.read_csv(os.path.join(c.data_path, c.in_file), sep="\t")
+    df_valid = pd.read_csv(os.path.join(c.data_path, c.in_file_valid), sep="\t")
+
+    train_slices = slice_loader(df_train)
+    valid_slices = slice_loader(df_valid)
 
     train_slices = slice_loader(df_train)
     valid_slices = slice_loader(df_valid)
