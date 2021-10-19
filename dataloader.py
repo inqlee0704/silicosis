@@ -498,8 +498,6 @@ def prep_dataloader_z(c):
     train_slices = slice_loader(df_train)
     valid_slices = slice_loader(df_valid)
 
-    train_slices = slice_loader(df_train)
-    valid_slices = slice_loader(df_valid)
     train_ds = SegDataset_withZ(
         df_train, train_slices, mask_name=c.mask, augmentations=get_train_aug()
     )
@@ -523,8 +521,6 @@ def prep_dataloader_multiC_z(c):
     train_slices = slice_loader(df_train)
     valid_slices = slice_loader(df_valid)
 
-    train_slices = slice_loader(df_train)
-    valid_slices = slice_loader(df_valid)
     train_ds = SegDataset_multiC_withZ(
         df_train, train_slices, mask_name=c.mask, augmentations=get_train_aug()
     )

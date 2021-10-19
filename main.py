@@ -42,7 +42,7 @@ def seed_everything(seed=42):
 
 def wandb_config():
     project = "silicosis"
-    run_name = "UNet_lung_final"
+    run_name = "ZUNet_lung_final_20"
     debug = False
     if debug:
         project = "debug"
@@ -54,7 +54,7 @@ def wandb_config():
         config.epochs = 1
         config.n_case = 5
     else:
-        config.epochs = 20
+        config.epochs = 10
         # n_case = 0 to run all cases
         config.n_case = 0
 
@@ -70,7 +70,7 @@ def wandb_config():
 
     # config.mask = 'airway'
     config.mask = "lung"
-    config.model = "UNet"
+    config.model = "ZUNet"
     config.activation = "leakyrelu"
     config.optimizer = "adam"
     config.scheduler = "CosineAnnealingWarmRestarts"
@@ -81,7 +81,7 @@ def wandb_config():
     config.train_bs = 8
     config.valid_bs = 16
     config.aug = True
-    config.Z = False
+    config.Z = True
 
     return config
 
@@ -181,11 +181,13 @@ if __name__ == "__main__":
 
     scaler = amp.GradScaler()
     if config.Z:
-        # train_loader, valid_loader = prep_dataloader_z(config)
-        train_loader, valid_loader = prep_dataloader_multiC_z(config)
+        train_loader, valid_loader = prep_dataloader_z(config)
+        # train_loader, valid_loader = prep_dataloader_multiC_z(config)
         # batch = next(iter(train_loader))
         # print(batch["image"].shape)
-        model = ZUNet_v1(in_channels=3)
+        model = ZUNet_v1(in_channels=1)
+        parameter_path = "RESULTS/ZUNet_lung_final_20211014/ZUNet_lung_final_19.pth"
+        model.load_state_dict(torch.load(parameter_path))
         # model = ZUNet_v2(in_channels=1)
         model.to(config.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
