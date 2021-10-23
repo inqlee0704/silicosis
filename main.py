@@ -3,25 +3,30 @@ from dotenv import load_dotenv
 import time
 import random
 import wandb
-import matplotlib.pyplot as plt
+import numpy as np
+
+# Custom
 from UNet import UNet
 from ZUNet_v1 import ZUNet_v1, ZUNet_v2
-from engine import Segmentor, Segmentor_z, Segmentor_z_v2
+from engine import *
+from dataloader import *
+
+# ML
+from torch import nn
+from torch.cuda import amp
+import torch
+from torchsummary import summary
 from torch.optim.lr_scheduler import (
     CosineAnnealingWarmRestarts,
     CosineAnnealingLR,
     ReduceLROnPlateau,
 )
-
 import torchvision.utils as vutils
-from dataloader import prep_dataloader, prep_dataloader_z, prep_dataloader_multiC_z
-from medpy.io import load
-import numpy as np
-from torch import nn
-from torch.cuda import amp
-import torch
-from torchsummary import summary
+import segmentation_models_pytorch as smp
 
+# Others
+import matplotlib.pyplot as plt
+from medpy.io import load
 import SimpleITK as sitk
 
 sitk.ProcessObject_SetGlobalWarningDisplay(False)
@@ -30,20 +35,10 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
-def seed_everything(seed=42):
-    random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-
 def wandb_config():
     project = "silicosis"
-    run_name = "ZUNet_lung_final_20"
-    debug = False
+    run_name = "UNet_lung_multiclass"
+    debug = True
     if debug:
         project = "debug"
 
@@ -58,8 +53,8 @@ def wandb_config():
         # n_case = 0 to run all cases
         config.n_case = 0
 
-    config.save = True
-
+    config.save = False
+    config.debug = debug
     config.data_path = os.getenv("VIDA_PATH")
     config.in_file = "ENV18PM_ProjSubjList_sillicosis.in"
     config.in_file_valid = "ENV18PM_ProjSubjList_sillicosis_valid.in"
@@ -75,7 +70,7 @@ def wandb_config():
     config.optimizer = "adam"
     config.scheduler = "CosineAnnealingWarmRestarts"
     config.loss = "BCE+dice"
-    config.bce_weight = 0.5
+    config.combined_loss = False
 
     config.learning_rate = 0.0001
     config.train_bs = 8
@@ -86,69 +81,25 @@ def wandb_config():
     return config
 
 
-def prep_test_img(multiC=False):
-    # Test
-    test_img, _ = load("/data1/inqlee0704/silicosis/data/inputs/02_ct.hdr")
-    test_img[test_img < -1024] = -1024
-    if multiC:
-        narrow_c = np.copy(test_img)
-        wide_c = np.copy(test_img)
-        narrow_c[narrow_c >= -500] = -500
-        wide_c[wide_c >= 300] = 300
-        test_img = (test_img - np.min(test_img)) / (np.max(test_img) - np.min(test_img))
-        wide_c = (wide_c - np.min(wide_c)) / (np.max(wide_c) - np.min(wide_c))
-        narrow_c = (narrow_c - np.min(narrow_c)) / (np.max(narrow_c) - np.min(narrow_c))
-        narrow_c = narrow_c[None, :]
-        wide_c = wide_c[None, :]
-        test_img = test_img[None, :]
-        test_img = np.concatenate([test_img, narrow_c, wide_c], axis=0)
-    else:
-        test_img = (test_img - np.min(test_img)) / (np.max(test_img) - np.min(test_img))
-        test_img = test_img[None, :]
-    return test_img
-
-
-def volume_inference_z(model, volume, threshold=0.5):
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    slices = np.zeros((512, 512, volume.shape[-1]))
-    for i in range(volume.shape[-1]):
-        s = volume[:, :, :, i]
-        s = s.astype(np.single)
-        s = torch.from_numpy(s).unsqueeze(0)
-        z = i / (volume.shape[-1] + 1)
-        z = np.floor(z * 10)
-        z = torch.tensor(z, dtype=torch.int64)
-        pred = model(s.to(DEVICE), z.to(DEVICE))
-        pred = torch.sigmoid(pred)
-        pred = np.squeeze(pred.cpu().detach())
-        pred[pred > threshold] = 1
-        pred[pred <= threshold] = 0
-        slices[:, :, i] = pred * 255
-        # slices[:, :, i] = torch.argmax(pred, dim=0)
-    return slices
-
-
-def volume_inference(model, volume, threshold=0.5):
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    slices = np.zeros((512, 512, volume.shape[-1]))
-    for i in range(volume.shape[-1]):
-        s = volume[:, :, :, i]
-        s = s.astype(np.single)
-        s = torch.from_numpy(s).unsqueeze(0)
-        pred = model(s.to(DEVICE))
-        pred = torch.sigmoid(pred)
-        pred = np.squeeze(pred.cpu().detach())
-        pred[pred > threshold] = 1
-        pred[pred <= threshold] = 0
-        slices[:, :, i] = pred * 255
-    return slices
+def seed_everything(seed=42):
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 def show_images(test_img, test_pred, epoch):
+    test_pred[test_pred == 1] = 128
+    test_pred[test_pred == 2] = 255
     test_img = torch.from_numpy(test_img)
-    test_img = test_img.permute(3, 0, 1, 2)
-    test_img = test_img[:, 0, :, :]
+    test_img = test_img.permute(2, 0, 1)
     test_img = test_img.unsqueeze(1)
+    # test_img = test_img.permute(3, 0, 1, 2)
+    # test_img = test_img[:, 0, :, :]
+    # test_img = test_img.unsqueeze(1)
 
     test_pred = torch.from_numpy(test_pred)
     test_pred = test_pred.permute(2, 0, 1)
@@ -168,43 +119,41 @@ def show_images(test_img, test_pred, epoch):
     plt.title(f"Lung masks at {epoch}")
     plt.imshow(test_pred_grid.permute(1, 2, 0))
 
-    # wandb.log({"plot": plt})
-
-    #    plt.close()
     return plt
 
 
-if __name__ == "__main__":
+def main():
     load_dotenv()
     seed_everything()
     config = wandb_config()
-
     scaler = amp.GradScaler()
+
+    if config.save:
+        dirname = f'{config.name}_{time.strftime("%Y%m%d", time.gmtime())}'
+        out_dir = os.path.join("RESULTS", dirname)
+        os.makedirs(out_dir, exist_ok=True)
+        path = os.path.join(out_dir, f"{config.name}")
+
+    train_loader, valid_loader = prep_dataloader(config)
+    criterion = smp.losses.DiceLoss(mode="multiclass")
     if config.Z:
-        train_loader, valid_loader = prep_dataloader_z(config)
-        # train_loader, valid_loader = prep_dataloader_multiC_z(config)
-        # batch = next(iter(train_loader))
-        # print(batch["image"].shape)
-        model = ZUNet_v1(in_channels=1)
-        parameter_path = "RESULTS/ZUNet_lung_final_20211014/ZUNet_lung_final_19.pth"
-        model.load_state_dict(torch.load(parameter_path))
-        # model = ZUNet_v2(in_channels=1)
+        model = ZUNet_v1(in_channels=1, num_c=3)
         model.to(config.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
         scheduler = CosineAnnealingWarmRestarts(
             optimizer, T_0=config.epochs, T_mult=1, eta_min=1e-8, last_epoch=-1
         )
-        eng = Segmentor_z(
+        eng = Segmentor_Z(
             model=model,
             optimizer=optimizer,
+            loss_fn=criterion,
             scheduler=scheduler,
-            # loss_fn=loss_fn,
             device=config.device,
             scaler=scaler,
+            combined_loss=config.combined_loss,
         )
     else:
-        train_loader, valid_loader = prep_dataloader(config)
-        model = UNet()
+        model = UNet(in_channel=1, num_c=3)
         model.to(config.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
         scheduler = CosineAnnealingWarmRestarts(
@@ -213,44 +162,51 @@ if __name__ == "__main__":
         eng = Segmentor(
             model=model,
             optimizer=optimizer,
+            loss_fn=criterion,
             scheduler=scheduler,
-            # loss_fn=loss_fn,
             device=config.device,
             scaler=scaler,
+            combined_loss=config.combined_loss,
         )
 
-    if config.save:
-        dirname = f'{config.name}_{time.strftime("%Y%m%d", time.gmtime())}'
-        out_dir = os.path.join("RESULTS", dirname)
-        os.makedirs(out_dir, exist_ok=True)
-        path = os.path.join(out_dir, f"{config.name}")
-
-    best_loss = np.inf
     # Train
+    best_loss = np.inf
     test_img = prep_test_img(multiC=False)
     wandb.watch(eng.model, log="all", log_freq=10)
     for epoch in range(config.epochs):
-        trn_loss, trn_dice_loss, trn_bce_loss = eng.train(train_loader)
-        val_loss, val_dice_loss, val_bce_loss = eng.evaluate(valid_loader)
-        if config.Z:
-            test_pred = volume_inference_z(model, test_img, threshold=0.5)
-        else:
-            test_pred = volume_inference(model, test_img, threshold=0.5)
-        plt = show_images(test_img, test_pred, epoch)
-        wandb.log(
-            {
-                "epoch": epoch,
-                "trn_loss": trn_loss,
-                "trn_dice_loss": trn_dice_loss,
-                "trn_bce_loss": trn_bce_loss,
-                "val_loss": val_loss,
-                "val_dice_loss": val_dice_loss,
-                "val_bce_loss": val_bce_loss,
-                "Plot": plt,
-            }
-        )
-        plt.close()
+        if config.combined_loss:
+            trn_loss, trn_dice_loss, trn_bce_loss = eng.train(train_loader)
+            val_loss, val_dice_loss, val_bce_loss = eng.evaluate(valid_loader)
+            test_pred = eng.inference(test_img)
+            plt = show_images(test_img, test_pred, epoch)
+            wandb.log(
+                {
+                    "epoch": epoch,
+                    "trn_loss": trn_loss,
+                    "trn_dice_loss": trn_dice_loss,
+                    "trn_bce_loss": trn_bce_loss,
+                    "val_loss": val_loss,
+                    "val_dice_loss": val_dice_loss,
+                    "val_bce_loss": val_bce_loss,
+                    "Plot": plt,
+                }
+            )
 
+        else:
+            trn_loss = eng.train(train_loader)
+            val_loss = eng.evaluate(valid_loader)
+            test_pred = eng.inference(test_img)
+            plt = show_images(test_img, test_pred, epoch)
+            wandb.log(
+                {
+                    "epoch": epoch,
+                    "trn_loss": trn_loss,
+                    "val_loss": val_loss,
+                    "Plot": plt,
+                }
+            )
+
+        plt.close()
         if config.scheduler == "ReduceLROnPlateau":
             scheduler.step(val_loss)
         eng.epoch += 1
@@ -262,3 +218,7 @@ if __name__ == "__main__":
                 model_path = path + f"_{epoch}.pth"
                 torch.save(model.state_dict(), model_path)
                 wandb.save(path)
+
+
+if __name__ == "__main__":
+    main()
