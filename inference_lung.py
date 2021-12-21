@@ -21,43 +21,6 @@ from skimage.measure import label, regionprops
 sitk.ProcessObject_SetGlobalWarningDisplay(False)
 
 
-# def volume_inference(model, volume, threshold=0.5):
-#     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-#     slices = np.zeros(volume.shape)
-#     for i in range(volume.shape[2]):
-#         s = volume[:, :, i]
-#         s = s.astype(np.single)
-#         s = torch.from_numpy(s).unsqueeze(0).unsqueeze(0)
-#         pred = model(s.to(DEVICE))
-#         pred = torch.sigmoid(pred)
-#         pred = np.squeeze(pred.cpu().detach())
-#         pred[pred > threshold] = 1
-#         pred[pred <= threshold] = 0
-#         slices[:, :, i] = pred
-#         # slices[:, :, i] = torch.argmax(pred, dim=0)
-#     return slices
-
-
-# def volume_inference_z(model, volume, threshold=0.5):
-#     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-#     slices = np.zeros(volume.shape)
-#     for i in range(volume.shape[2]):
-#         s = volume[:, :, i]
-#         s = s.astype(np.single)
-#         s = torch.from_numpy(s).unsqueeze(0).unsqueeze(0)
-#         z = i / (volume.shape[2] + 1)
-#         z = np.floor(z * 10)
-#         z = torch.tensor(z, dtype=torch.int64)
-#         pred = model(s.to(DEVICE), z.to(DEVICE))
-#         pred = torch.sigmoid(pred)
-#         pred = np.squeeze(pred.cpu().detach())
-#         pred[pred > threshold] = 1
-#         pred[pred <= threshold] = 0
-#         slices[:, :, i] = pred * 255
-#         # slices[:, :, i] = torch.argmax(pred, dim=0)
-#     return slices
-
-
 def remove_noise(pred, by="centroid"):
     cleared = clear_border(pred)
     label_img = label(cleared)

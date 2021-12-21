@@ -37,8 +37,8 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 def wandb_config():
     project = "silicosis"
-    run_name = "UNet_lung_multiclass"
-    debug = True
+    run_name = "ZUNet_lung_multiclass"
+    debug = False
     if debug:
         project = "debug"
 
@@ -49,11 +49,11 @@ def wandb_config():
         config.epochs = 1
         config.n_case = 5
     else:
-        config.epochs = 10
+        config.epochs = 30
         # n_case = 0 to run all cases
         config.n_case = 0
 
-    config.save = False
+    config.save = True
     config.debug = debug
     config.data_path = os.getenv("VIDA_PATH")
     config.in_file = "ENV18PM_ProjSubjList_sillicosis.in"
@@ -70,11 +70,12 @@ def wandb_config():
     config.optimizer = "adam"
     config.scheduler = "CosineAnnealingWarmRestarts"
     config.loss = "BCE+dice"
-    config.combined_loss = False
+    config.combined_loss = True
 
     config.learning_rate = 0.0001
     config.train_bs = 8
     config.valid_bs = 16
+    config.num_c = 3
     config.aug = True
     config.Z = True
 
@@ -122,6 +123,19 @@ def show_images(test_img, test_pred, epoch):
     return plt
 
 
+def combined_loss(outputs, targets, binaryclass=False):
+    if binaryclass:
+        DiceLoss = smp.losses.DiceLoss(mode="binary")
+        CE = nn.CrossEntropyLoss()
+    else:
+        DiceLoss = smp.losses.DiceLoss(mode="multiclass")
+        CE = nn.CrossEntropyLoss()
+    dice_loss = DiceLoss(outputs, targets)
+    ce_loss = CE(outputs, targets)
+    loss = dice_loss + ce_loss
+    return loss, ce_loss, dice_loss
+
+
 def main():
     load_dotenv()
     seed_everything()
@@ -135,9 +149,11 @@ def main():
         path = os.path.join(out_dir, f"{config.name}")
 
     train_loader, valid_loader = prep_dataloader(config)
-    criterion = smp.losses.DiceLoss(mode="multiclass")
+    # criterion = smp.losses.DiceLoss(mode="multiclass")
+    # criterion = nn.CrossEntropyLoss()
+    criterion = combined_loss
     if config.Z:
-        model = ZUNet_v1(in_channels=1, num_c=3)
+        model = ZUNet_v1(in_channels=1, num_c=config.num_c)
         model.to(config.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
         scheduler = CosineAnnealingWarmRestarts(
@@ -153,7 +169,7 @@ def main():
             combined_loss=config.combined_loss,
         )
     else:
-        model = UNet(in_channel=1, num_c=3)
+        model = UNet(in_channel=1, num_c=config.num_c)
         model.to(config.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
         scheduler = CosineAnnealingWarmRestarts(

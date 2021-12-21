@@ -31,7 +31,6 @@ Inputs:
     - slices: slice information from slice_loader function [list]
 Outputs:
     - dictionary that containts both image tensor & mask tensor [dict]
-
 """
 
 
@@ -68,6 +67,11 @@ class SegDataset:
                     os.path.join(subj_path, "ZUNU_vida-lung.img.gz")
                     for subj_path in self.subj_paths
                 ]
+            elif mask_name == "vessel":
+                self.mask_paths = [
+                    os.path.join(subj_path, "ZUNU_vida-vessels.img.gz")
+                    for subj_path in self.subj_paths
+                ]
 
         self.slices = slices
         self.pat_num = None
@@ -97,6 +101,8 @@ class SegDataset:
             mask = self.mask[:, :, slc[1]]
             # Airway mask is stored as 255
             if self.mask_name == "airway":
+                mask = mask / 255
+            elif self.mask_name == "vessel":
                 mask = mask / 255
             elif self.mask_name == "lung":
                 mask[mask == 20] = 1
@@ -153,6 +159,11 @@ class SegDataset_Z:
                     os.path.join(subj_path, "ZUNU_vida-lung.img.gz")
                     for subj_path in self.subj_paths
                 ]
+            elif mask_name == "vessel":
+                self.mask_paths = [
+                    os.path.join(subj_path, "ZUNU_vida-vessels.img.gz")
+                    for subj_path in self.subj_paths
+                ]
 
         self.slices = slices
         self.pat_num = None
@@ -186,6 +197,8 @@ class SegDataset_Z:
             mask = self.mask[:, :, slc[1]]
             # Airway mask is stored as 255
             if self.mask_name == "airway":
+                mask = mask / 255
+            elif self.mask_name == "vessel":
                 mask = mask / 255
             elif self.mask_name == "lung":
                 mask[mask == 20] = 1
@@ -229,6 +242,11 @@ class SegDataset_multiC_withZ:
                 os.path.join(subj_path, "ZUNU_vida-lung.img.gz")
                 for subj_path in self.subj_paths
             ]
+        elif mask_name == "vessel":
+                self.mask_paths = [
+                    os.path.join(subj_path, "ZUNU_vida-vessels.img.gz")
+                    for subj_path in self.subj_paths
+                ]
         self.slices = slices
         self.pat_num = None
         self.img = None
@@ -266,6 +284,8 @@ class SegDataset_multiC_withZ:
             self.mask, _ = load(self.mask_paths[slc[0]])
             if self.mask_name == "airway":
                 self.mask = self.mask / 255
+            elif self.mask_name == "vessel":
+                mask = mask / 255
             elif self.mask_name == "lung":
                 self.mask[self.mask == 20] = 1
                 self.mask[self.mask == 30] = 1
@@ -301,77 +321,6 @@ class SegDataset_multiC_withZ:
             "z": torch.tensor(z, dtype=torch.int64),
         }
 
-
-class SegDataset_withZ:
-    def __init__(
-        self, subjlist, slices, mask_name=None, resize=None, augmentations=None
-    ):
-        self.subj_paths = subjlist.loc[:, "ImgDir"].values
-        self.img_paths = [
-            os.path.join(subj_path, "zunu_vida-ct.img") for subj_path in self.subj_paths
-        ]
-        if mask_name == "airway":
-            self.mask_paths = [
-                os.path.join(subj_path, "ZUNU_vida-airtree.img.gz")
-                for subj_path in self.subj_paths
-            ]
-        elif mask_name == "lung":
-            self.mask_paths = [
-                os.path.join(subj_path, "ZUNU_vida-lung.img.gz")
-                for subj_path in self.subj_paths
-            ]
-        self.slices = slices
-        self.pat_num = None
-        self.img = None
-        self.hdr = None
-        self.mask = None
-        self.mask_name = mask_name
-        self.resize = resize
-        self.augmentations = augmentations
-
-    def __len__(self):
-        return len(self.slices)
-
-    def __getitem__(self, idx):
-        slc = self.slices[idx]
-        if self.pat_num != slc[0]:
-            self.img, self.hdr = load(self.img_paths[slc[0]])
-            # some background values are set to -3024
-            self.img[self.img < -1024] = -1024
-            self.img = (self.img - np.min(self.img)) / (
-                np.max(self.img) - np.min(self.img)
-            )
-            self.mask, _ = load(self.mask_paths[slc[0]])
-            if self.mask_name == "airway":
-                self.mask = self.mask / 255
-            elif self.mask_name == "lung":
-                self.mask[self.mask == 20] = 1
-                self.mask[self.mask == 30] = 1
-            else:
-                print("Specify mask_name (airway or lung)")
-                return -1
-
-            self.pat_num = slc[0]
-
-        z = slc[1] / (self.img.shape[2] + 1)
-        # z ranges from 0 to 9
-        z = np.floor(z * 10)
-        img = self.img[:, :, slc[1]]
-        mask = self.mask[:, :, slc[1]]
-
-        mask = mask.astype(int)
-        img = img[None, :]
-        mask = mask[None, :]
-
-        if self.augmentations is not None:
-            augmented = self.augmentations(image=img, mask=mask)
-            img, mask = augmented["image"], augmented["mask"]
-
-        return {
-            "image": torch.tensor(img.copy()),
-            "seg": torch.tensor(mask.copy()),
-            "z": torch.tensor(z, dtype=torch.int64),
-        }
 
 
 """
@@ -477,10 +426,16 @@ Prepare train & valid dataloaders
 """
 
 
-def prep_dataloader(c):
+def prep_dataloader(c, k=None, df=None):
     # n_case: load n number of cases, 0: load all
-    df_train = pd.read_csv(os.path.join(c.data_path, c.in_file), sep="\t")
-    df_valid = pd.read_csv(os.path.join(c.data_path, c.in_file_valid), sep="\t")
+    # K is not none, implement KFold
+    if k is not None:
+        df_train = df[df['fold']!=k].reset_index(drop=True)
+        df_valid = df[df['fold']==k].reset_index(drop=True)
+    else:
+        df_train = pd.read_csv(os.path.join(c.data_path, c.in_file), sep="\t")
+        df_valid = pd.read_csv(os.path.join(c.data_path, c.in_file_valid), sep="\t")
+
     if c.debug:
         df_train = df_train[:1]
         df_valid = df_train[:1]
@@ -572,13 +527,13 @@ def get_train_aug():
     return A.Compose(
         [
             A.Rotate(limit=15),
-            A.OneOf(
-                [
-                    A.HorizontalFlip(),
-                    A.VerticalFlip(),
-                ],
-                p=0.5,
-            ),
+            # A.OneOf(
+            #     [
+            #         A.HorizontalFlip(),
+            #         A.VerticalFlip(),
+            #     ],
+            #     p=0.5,
+            # ),
             A.OneOf(
                 [
                     A.Blur(blur_limit=5),
