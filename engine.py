@@ -178,6 +178,26 @@ class Segmentor:
                 pred_volume[:, :, i] = pred
             return pred_volume
 
+    def inference_pmap(self, img_volume, n_class):
+        # img_volume: [512,512,Z]
+        # pred_volume: [512,512,z,n_class]
+        # n_class: number of classes, for lung: 3 (left, right, background)
+        # probability map
+        DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model.eval()
+        pred_volume = np.zeros((512,512,img_volume.shape[2],n_class))
+        with torch.no_grad():
+            for i in range(img_volume.shape[2]):
+                slice = img_volume[:, :, i]
+                slice = torch.from_numpy(slice).unsqueeze(0).unsqueeze(0)
+                out = self.model(slice.to(DEVICE, dtype=torch.float))
+                p_map = nn.Softmax(dim=1)(out)
+                p_map = np.squeeze(p_map.cpu().detach())
+                p_map = p_map.permute(1,2,0)
+    
+                pred_volume[:, :, i, :] = p_map
+            return pred_volume
+
 
 class Segmentor_Z:
     def __init__(
@@ -313,6 +333,28 @@ class Segmentor_Z:
                 pred_volume[:, :, i] = pred
             return pred_volume
 
+    def inference_pmap(self, img_volume, n_class):
+        # img_volume: [512,512,Z]
+        # pred_volume: [512,512,z,n_class]
+        # n_class: number of classes, for lung: 3 (left, right, background)
+        # probability map
+        DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model.eval()
+        pred_volume = np.zeros((512,512,img_volume.shape[2],n_class))
+        with torch.no_grad():
+            for i in range(img_volume.shape[2]):
+                slice = img_volume[:, :, i]
+                slice = torch.from_numpy(slice).unsqueeze(0).unsqueeze(0)
+                z = i / (img_volume.shape[2] + 1)
+                z = np.floor(z * 10)
+                z = torch.tensor(z, dtype=torch.int64)
+                out = self.model(slice.to(DEVICE, dtype=torch.float), z.to(DEVICE))
+                p_map = nn.Softmax(dim=1)(out)
+                p_map = np.squeeze(p_map.cpu().detach())
+                p_map = p_map.permute(1,2,0)
+    
+                pred_volume[:, :, i, :] = p_map
+            return pred_volume
 
 class Segmentor_z_v2:
     def __init__(self, model, optimizer, scheduler, device, scaler):
