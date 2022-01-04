@@ -460,10 +460,10 @@ def prep_dataloader(c, k=None, df=None):
         valid_ds = SegDataset(df_valid, valid_slices, mask_name=c.mask)
 
     train_loader = DataLoader(
-        train_ds, batch_size=c.train_bs, shuffle=False, num_workers=0
+        train_ds, batch_size=c.train_bs, shuffle=False, num_workers=4
     )
     valid_loader = DataLoader(
-        valid_ds, batch_size=c.valid_bs, shuffle=False, num_workers=0
+        valid_ds, batch_size=c.valid_bs, shuffle=False, num_workers=4
     )
 
     return train_loader, valid_loader
@@ -480,47 +480,6 @@ def prep_testloader(infer_path, test_bs=1):
     )
     dataloader = DataLoader(ds, batch_size=test_bs, shuffle=False, num_workers=0)
     return dataloader
-
-
-def prep_dataloader_z(c):
-    # n_case: load n number of cases, 0: load all
-    df_train = pd.read_csv(os.path.join(c.data_path, c.in_file), sep="\t")
-    df_valid = pd.read_csv(os.path.join(c.data_path, c.in_file_valid), sep="\t")
-
-    train_slices = slice_loader(df_train)
-    valid_slices = slice_loader(df_valid)
-
-    train_loader = DataLoader(
-        train_ds, batch_size=c.train_bs, shuffle=False, num_workers=0
-    )
-    valid_loader = DataLoader(
-        valid_ds, batch_size=c.valid_bs, shuffle=False, num_workers=0
-    )
-
-    return train_loader, valid_loader
-
-
-def prep_dataloader_multiC_z(c):
-    # n_case: load n number of cases, 0: load all
-    df_train = pd.read_csv(os.path.join(c.data_path, c.in_file), sep="\t")
-    df_valid = pd.read_csv(os.path.join(c.data_path, c.in_file_valid), sep="\t")
-
-    train_slices = slice_loader(df_train)
-    valid_slices = slice_loader(df_valid)
-
-    train_ds = SegDataset_multiC_withZ(
-        df_train, train_slices, mask_name=c.mask, augmentations=get_train_aug()
-    )
-    valid_ds = SegDataset_multiC_withZ(df_valid, valid_slices, mask_name=c.mask)
-
-    train_loader = DataLoader(
-        train_ds, batch_size=c.train_bs, shuffle=False, num_workers=0
-    )
-    valid_loader = DataLoader(
-        valid_ds, batch_size=c.valid_bs, shuffle=False, num_workers=0
-    )
-
-    return train_loader, valid_loader
 
 
 def get_train_aug():

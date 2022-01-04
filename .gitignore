@@ -1,0 +1,7 @@
+data
+*.ipynb
+monits
+RESULTS
+wandb
+__pycache__
+.env

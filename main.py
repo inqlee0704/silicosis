@@ -7,7 +7,7 @@ import numpy as np
 
 # Custom
 from UNet import UNet
-from ZUNet_v1 import ZUNet_v1, ZUNet_v2
+from ZUNet_v1 import ZUNet_v1
 from engine import *
 from dataloader import *
 
@@ -37,7 +37,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 def wandb_config():
     project = "silicosis"
-    run_name = "ZUNet_lung_multiclass"
+    run_name = "ZUNet_lung_multiclass_n64"
     debug = False
     if debug:
         project = "debug"
@@ -56,8 +56,8 @@ def wandb_config():
     config.save = True
     config.debug = debug
     config.data_path = os.getenv("VIDA_PATH")
-    config.in_file = "ENV18PM_ProjSubjList_sillicosis.in"
-    config.in_file_valid = "ENV18PM_ProjSubjList_sillicosis_valid.in"
+    config.in_file = "ENV18PM_ProjSubjList_IN0_train_20211129.in"
+    config.in_file_valid = "ENV18PM_ProjSubjList_IN0_valid_20211129.in"
     # config.in_file = "ENV18PM_ProjSubjList_cleaned_IN.in"
     config.test_results_dir = "RESULTS"
     config.name = run_name
@@ -72,9 +72,9 @@ def wandb_config():
     config.loss = "BCE+dice"
     config.combined_loss = True
 
-    config.learning_rate = 0.0001
-    config.train_bs = 8
-    config.valid_bs = 16
+    config.learning_rate = 0.0002
+    config.train_bs = 16
+    config.valid_bs = 32
     config.num_c = 3
     config.aug = True
     config.Z = True
@@ -91,6 +91,37 @@ def seed_everything(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+def prep_test_img(multiC=False):
+    # Test
+    test_img, _ = load('D:\\silicosis\\data\\inputs\\02_ct.img')
+    # test_img, _ = load("/data1/inqlee0704/silicosis/data/inputs/02_ct.hdr")
+    test_img[test_img < -1024] = -1024
+    if multiC:
+        narrow_c = np.copy(test_img)
+        wide_c = np.copy(test_img)
+        narrow_c[narrow_c >= -500] = -500
+        wide_c[wide_c >= 300] = 300
+        test_img = (test_img - np.min(test_img)) / (np.max(test_img) - np.min(test_img))
+        wide_c = (wide_c - np.min(wide_c)) / (np.max(wide_c) - np.min(wide_c))
+        narrow_c = (narrow_c - np.min(narrow_c)) / (np.max(narrow_c) - np.min(narrow_c))
+        narrow_c = narrow_c[None, :]
+        wide_c = wide_c[None, :]
+        test_img = test_img[None, :]
+        test_img = np.concatenate([test_img, narrow_c, wide_c], axis=0)
+    else:
+        test_img = (test_img - np.min(test_img)) / (np.max(test_img) - np.min(test_img))
+        # test_img = test_img[None, :]
+    return test_img
+
+def plot_pmap(p_map, epoch, z=20):
+    fig, axs = plt.subplots(1,3, figsize=(15,12))
+    im1 = axs[0].imshow(p_map[:,:,z,0])
+    fig.colorbar(im1, ax=axs[0], shrink=0.3)
+    im2 = axs[1].imshow(p_map[:,:,z,1])
+    fig.colorbar(im1, ax=axs[1], shrink=0.3)
+    im3 = axs[2].imshow(p_map[:,:,z,2])
+    fig.colorbar(im1, ax=axs[2], shrink=0.3)
+    return fig
 
 def show_images(test_img, test_pred, epoch):
     test_pred[test_pred == 1] = 128
@@ -193,8 +224,10 @@ def main():
         if config.combined_loss:
             trn_loss, trn_dice_loss, trn_bce_loss = eng.train(train_loader)
             val_loss, val_dice_loss, val_bce_loss = eng.evaluate(valid_loader)
-            test_pred = eng.inference(test_img)
-            plt = show_images(test_img, test_pred, epoch)
+            # test_pred = eng.inference(test_img)
+            test_pmap = eng.inference_pmap(test_img, n_class=3)
+            # plt = show_images(test_img, test_pred, epoch)
+            plt = plot_pmap(test_pmap, epoch)
             wandb.log(
                 {
                     "epoch": epoch,
@@ -222,7 +255,7 @@ def main():
                 }
             )
 
-        plt.close()
+        # plt.close()
         if config.scheduler == "ReduceLROnPlateau":
             scheduler.step(val_loss)
         eng.epoch += 1
