@@ -69,12 +69,12 @@ def wandb_config():
     config.activation = "leakyrelu"
     config.optimizer = "adam"
     config.scheduler = "CosineAnnealingWarmRestarts"
-    config.loss = "BCE+dice"
+    config.loss = "BCE+Tversky"
     config.combined_loss = True
 
     config.learning_rate = 0.0002
-    config.train_bs = 16
-    config.valid_bs = 32
+    config.train_bs = 8
+    config.valid_bs = 16
     config.num_c = 3
     config.aug = True
     config.Z = True
@@ -93,8 +93,8 @@ def seed_everything(seed=42):
 
 def prep_test_img(multiC=False):
     # Test
-    test_img, _ = load('D:\\silicosis\\data\\inputs\\02_ct.img')
-    # test_img, _ = load("/data1/inqlee0704/silicosis/data/inputs/02_ct.hdr")
+    # test_img, _ = load('D:\\silicosis\\data\\inputs\\02_ct.img')
+    test_img, _ = load("/data1/inqlee0704/silicosis/data/inputs/02_ct.hdr")
     test_img[test_img < -1024] = -1024
     if multiC:
         narrow_c = np.copy(test_img)
@@ -159,7 +159,8 @@ def combined_loss(outputs, targets, binaryclass=False):
         DiceLoss = smp.losses.DiceLoss(mode="binary")
         CE = nn.CrossEntropyLoss()
     else:
-        DiceLoss = smp.losses.DiceLoss(mode="multiclass")
+        # DiceLoss = smp.losses.DiceLoss(mode="multiclass")
+        DiceLoss = smp.losses.TverskyLoss(mode="multiclass",alpha=0.3,beta=0.7)
         CE = nn.CrossEntropyLoss()
     dice_loss = DiceLoss(outputs, targets)
     ce_loss = CE(outputs, targets)
