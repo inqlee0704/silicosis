@@ -4,7 +4,6 @@ import time
 import random
 import wandb
 import pandas as pd
-from dataloader import prep_dataloader, prep_dataloader_z, prep_dataloader_multiC_z
 from medpy.io import load
 import numpy as np
 from tqdm.auto import tqdm
@@ -37,8 +36,8 @@ def get_config():
 
     config = wandb.config
     config.data_path = os.getenv("VIDA_PATH")
-    config.in_file = "ENV18PM_ProjSubjList_sillicosis.in"
-    config.in_file_valid = "ENV18PM_ProjSubjList_sillicosis_valid.in"
+    config.in_file = "ENV18PM_ProjSubjList_IN0_train_20211129.in"
+    config.in_file_valid = "ENV18PM_ProjSubjList_IN0_valid_20211129.in"
 
     return config
 
@@ -51,8 +50,8 @@ if __name__ == "__main__":
     df_valid = pd.read_csv(os.path.join(c.data_path, c.in_file_valid), sep="\t")
 
     # Train #
-    # pbar = tqdm(enumerate(df_train.ImgDir), total=len(df_train))
-    pbar = tqdm(enumerate(df_valid.ImgDir), total=len(df_valid))
+    pbar = tqdm(enumerate(df_train.ImgDir), total=len(df_train))
+    # pbar = tqdm(enumerate(df_valid.ImgDir), total=len(df_valid))
     for i, path in pbar:
         img, _ = load(os.path.join(path, "zunu_vida-ct.img"))
         lung, _ = load(os.path.join(path, "ZUNU_vida-lung.img.gz"))

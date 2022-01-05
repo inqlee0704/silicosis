@@ -10,6 +10,7 @@ from UNet import UNet
 from ZUNet_v1 import ZUNet_v1
 from engine import *
 from dataloader import *
+from losses import *
 
 # ML
 from torch import nn
@@ -38,7 +39,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 def wandb_config():
     project = "silicosis"
     run_name = "ZUNet_lung_multiclass_n64"
-    debug = False
+    debug = True
     if debug:
         project = "debug"
 
@@ -53,7 +54,7 @@ def wandb_config():
         # n_case = 0 to run all cases
         config.n_case = 0
 
-    config.save = True
+    config.save = False
     config.debug = debug
     config.data_path = os.getenv("VIDA_PATH")
     config.in_file = "ENV18PM_ProjSubjList_IN0_train_20211129.in"
@@ -154,20 +155,6 @@ def show_images(test_img, test_pred, epoch):
     return plt
 
 
-def combined_loss(outputs, targets, binaryclass=False):
-    if binaryclass:
-        DiceLoss = smp.losses.DiceLoss(mode="binary")
-        CE = nn.CrossEntropyLoss()
-    else:
-        # DiceLoss = smp.losses.DiceLoss(mode="multiclass")
-        DiceLoss = smp.losses.TverskyLoss(mode="multiclass",alpha=0.3,beta=0.7)
-        CE = nn.CrossEntropyLoss()
-    dice_loss = DiceLoss(outputs, targets)
-    ce_loss = CE(outputs, targets)
-    loss = dice_loss + ce_loss
-    return loss, ce_loss, dice_loss
-
-
 def main():
     load_dotenv()
     seed_everything()
@@ -183,7 +170,7 @@ def main():
     train_loader, valid_loader = prep_dataloader(config)
     # criterion = smp.losses.DiceLoss(mode="multiclass")
     # criterion = nn.CrossEntropyLoss()
-    criterion = combined_loss
+    criterion = combo_loss
     if config.Z:
         model = ZUNet_v1(in_channels=1, num_c=config.num_c)
         model.to(config.device)
