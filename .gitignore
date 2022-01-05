@@ -5,3 +5,4 @@ RESULTS
 wandb
 __pycache__
 .env
+experiment
