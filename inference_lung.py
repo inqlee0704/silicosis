@@ -10,7 +10,6 @@ from ZUNet_v1 import ZUNet_v1, ZUNet_v2
 from dataloader import TE_loader
 import torch
 import nibabel as nib
-import ttach as tta
 
 import cv2
 
