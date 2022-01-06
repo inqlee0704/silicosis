@@ -1,36 +1,0 @@
-nohup: ignoring input
-wandb: Currently logged in as: temoc (use `wandb login --relogin` to force relogin)
------------
-Train K = 0
------------
-wandb: wandb version 0.12.9 is available!  To upgrade, please run:
-wandb:  $ pip install wandb --upgrade
-wandb: Tracking run with wandb version 0.11.2
-wandb: Syncing run UNet_lung_multiclass_0
-wandb: ⭐️ View project at https://wandb.ai/temoc/silicosis
-wandb: 🚀 View run at https://wandb.ai/temoc/silicosis/runs/1oggqj6a
-wandb: Run data is saved locally in /data1/inqlee0704/silicosis/wandb/run-20211220_171019-1oggqj6a
-wandb: Run `wandb offline` to turn off syncing.
-
-Loading Data
-Traceback (most recent call last):
-  File "KFold.py", line 275, in <module>
-    main()
-  File "KFold.py", line 177, in main
-    train_loader, valid_loader = prep_dataloader(config,k=k, df=df)
-  File "/data1/inqlee0704/silicosis/dataloader.py", line 443, in prep_dataloader
-    train_slices = slice_loader(df_train)
-  File "/data1/inqlee0704/silicosis/dataloader.py", line 361, in slice_loader
-    img, _ = load(img_paths[ii])
-  File "/home/inqlee0704/anaconda3/envs/py37/lib/python3.7/site-packages/medpy/io/load.py", line 106, in load
-    raise ImageLoadingError('The supplied image {} does not exist.'.format(image))
-medpy.core.exceptions.ImageLoadingError: The supplied image /data4/common/IR/ImageData/VIDA_20200113-17_PM_WiM/101/zunu_vida-ct.img does not exist.
-wandb: Waiting for W&B process to finish, PID 91468
-wandb: Program failed with code 1.  Press ctrl-c to abort syncing.
-wandb: - 0.00MB of 0.00MB uploaded (0.00MB deduped)wandb: \ 0.00MB of 0.00MB uploaded (0.00MB deduped)wandb: | 0.00MB of 0.01MB uploaded (0.00MB deduped)wandb: / 0.00MB of 0.01MB uploaded (0.00MB deduped)wandb: - 0.00MB of 0.01MB uploaded (0.00MB deduped)wandb: \ 0.00MB of 0.01MB uploaded (0.00MB deduped)wandb: | 0.00MB of 0.01MB uploaded (0.00MB deduped)wandb: / 0.00MB of 0.01MB uploaded (0.00MB deduped)wandb: - 0.01MB of 0.01MB uploaded (0.00MB deduped)wandb: \ 0.01MB of 0.01MB uploaded (0.00MB deduped)wandb: | 0.01MB of 0.01MB uploaded (0.00MB deduped)wandb: / 0.01MB of 0.01MB uploaded (0.00MB deduped)wandb: - 0.01MB of 0.01MB uploaded (0.00MB deduped)wandb: \ 0.01MB of 0.01MB uploaded (0.00MB deduped)wandb: | 0.01MB of 0.01MB uploaded (0.00MB deduped)wandb: / 0.01MB of 0.01MB uploaded (0.00MB deduped)wandb:                                                                                
-wandb: Find user logs for this run at: /data1/inqlee0704/silicosis/wandb/run-20211220_171019-1oggqj6a/logs/debug.log
-wandb: Find internal logs for this run at: /data1/inqlee0704/silicosis/wandb/run-20211220_171019-1oggqj6a/logs/debug-internal.log
-wandb: Synced 6 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
-wandb: 
-wandb: Synced UNet_lung_multiclass_0: https://wandb.ai/temoc/silicosis/runs/1oggqj6a
-

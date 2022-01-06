@@ -39,7 +39,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 def wandb_config():
     project = "silicosis"
     run_name = "ZUNet_lung_multiclass_n64"
-    debug = True
+    debug = False
     if debug:
         project = "debug"
 
@@ -50,11 +50,11 @@ def wandb_config():
         config.epochs = 1
         config.n_case = 5
     else:
-        config.epochs = 30
+        config.epochs = 50
         # n_case = 0 to run all cases
         config.n_case = 0
 
-    config.save = False
+    config.save = True
     config.debug = debug
     config.data_path = os.getenv("VIDA_PATH")
     config.in_file = "ENV18PM_ProjSubjList_IN0_train_20211129.in"
@@ -69,11 +69,13 @@ def wandb_config():
     config.model = "ZUNet"
     config.activation = "leakyrelu"
     config.optimizer = "adam"
-    config.scheduler = "CosineAnnealingWarmRestarts"
+    # config.scheduler = "CosineAnnealingWarmRestarts"
+    config.scheduler = "ReduceLROnPlateau"
     config.loss = "BCE+Tversky"
     config.combined_loss = True
 
-    config.learning_rate = 0.0002
+    # config.learning_rate = 0.0002
+    config.learning_rate = 0.0004
     config.train_bs = 8
     config.valid_bs = 16
     config.num_c = 3
@@ -94,8 +96,9 @@ def seed_everything(seed=42):
 
 def prep_test_img(multiC=False):
     # Test
-    # test_img, _ = load('D:\\silicosis\\data\\inputs\\02_ct.img')
-    test_img, _ = load("/data1/inqlee0704/silicosis/data/inputs/02_ct.hdr")
+    test_img_path = os.getenv("TEST_IMG_PATH")
+    test_img, _ = load(test_img_path)
+    # test_img, _ = load("/data1/inqlee0704/silicosis/data/inputs/02_ct.hdr")
     test_img[test_img < -1024] = -1024
     if multiC:
         narrow_c = np.copy(test_img)
@@ -175,14 +178,17 @@ def main():
         model = ZUNet_v1(in_channels=1, num_c=config.num_c)
         model.to(config.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
-        scheduler = CosineAnnealingWarmRestarts(
-            optimizer, T_0=config.epochs, T_mult=1, eta_min=1e-8, last_epoch=-1
+        # scheduler = CosineAnnealingWarmRestarts(
+        #     optimizer, T_0=config.epochs, T_mult=1, eta_min=1e-8, last_epoch=-1
+        # )
+        scheduler = ReduceLROnPlateau(
+            optimizer, factor=0.5, patience=5, verbose=True
         )
         eng = Segmentor_Z(
             model=model,
             optimizer=optimizer,
             loss_fn=criterion,
-            scheduler=scheduler,
+            # scheduler=scheduler,
             device=config.device,
             scaler=scaler,
             combined_loss=config.combined_loss,
@@ -191,14 +197,17 @@ def main():
         model = UNet(in_channel=1, num_c=config.num_c)
         model.to(config.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
-        scheduler = CosineAnnealingWarmRestarts(
-            optimizer, T_0=config.epochs, T_mult=1, eta_min=1e-8, last_epoch=-1
+        # scheduler = CosineAnnealingWarmRestarts(
+        #     optimizer, T_0=config.epochs, T_mult=1, eta_min=1e-8, last_epoch=-1
+        # )
+        scheduler = ReduceLROnPlateau(
+            optimizer, factor=0.5, patience=5, verbose=True
         )
         eng = Segmentor(
             model=model,
             optimizer=optimizer,
             loss_fn=criterion,
-            scheduler=scheduler,
+            # scheduler=scheduler,
             device=config.device,
             scaler=scaler,
             combined_loss=config.combined_loss,
