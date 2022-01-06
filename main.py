@@ -222,8 +222,8 @@ def main():
             trn_loss, trn_dice_loss, trn_bce_loss = eng.train(train_loader)
             val_loss, val_dice_loss, val_bce_loss = eng.evaluate(valid_loader)
             # test_pred = eng.inference(test_img)
-            test_pmap = eng.inference_pmap(test_img, n_class=3)
             # plt = show_images(test_img, test_pred, epoch)
+            test_pmap = eng.inference_pmap(test_img, n_class=3)
             plt = plot_pmap(test_pmap, epoch)
             wandb.log(
                 {
