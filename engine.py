@@ -7,6 +7,33 @@ import numpy as np
 from torch import nn
 
 
+def get_stats(outputs, targets):
+    one_hot_targets = nn.functional.one_hot(targets,num_classes=3).permute(0,3,1,2)
+    outputs = nn.Softmax(dim=1)(outputs)
+    outputs = torch.argmax(outputs,dim=1)
+    one_hot_outputs = nn.functional.one_hot(outputs,num_classes=3).permute(0,3,1,2)
+    
+    batch_size, num_classes, *dims = one_hot_targets.shape
+    one_hot_outputs = one_hot_outputs.view(batch_size, num_classes, -1)
+    one_hot_targets = one_hot_targets.view(batch_size, num_classes, -1)
+    tp = (one_hot_outputs * one_hot_targets).sum(2)
+    fp = one_hot_outputs.sum(2) - tp
+    fn = one_hot_targets.sum(2) - tp
+    tn = torch.prod(torch.tensor(dims)) - (tp + fp + fn)
+    return tp.sum(dim=0), fp.sum(dim=0), fn.sum(dim=0), tn.sum(dim=0)
+    
+def get_sensitivity(tp,fn): # Recall
+    return tp.float()/(tp.float()+fn.float()+1e-8)
+
+def get_specificity(tn,fp):
+    return tn.float()/(tn.float()+fp.float()+1e-8)
+
+def get_precision(tp,fp):
+    return tp.float()/(tp.float()+fp.float()+1e-8)
+
+def get_dice_score(precision, sensitivity):
+    return 2 * (precision * sensitivity)/(precision + sensitivity)
+
 def Dice3d(a, b):
     # print(f'pred shape: {a.shape}')
     # print(f'target shape: {b.shape}')
@@ -198,6 +225,39 @@ class Segmentor:
                 pred_volume[:, :, i, :] = p_map
             return pred_volume
 
+    def get_metrics(self, data_loader):
+        # outputs: [B, C, W, H]
+        # targets: [B, W, H]
+        iters = len(data_loader)
+        pbar = tqdm(enumerate(data_loader), total=iters)
+        DEVICE = 'cuda'
+        with torch.no_grad():
+            for step, batch in pbar:
+                inputs = batch["image"].to(DEVICE)
+                targets = batch["seg"].to(DEVICE)
+                outputs = self.model(inputs)
+                tp, fp, fn, tn = get_stats(outputs, targets)
+                if step==0:
+                    tps = tp
+                    fps = fp
+                    fns = fn
+                    tns = tn
+                else:
+                    tps += tp
+                    fps += fp
+                    fns += fn
+                    tns += tn
+
+            tps = tps.cpu().detach()
+            fps = fps.cpu().detach()
+            fns = fns.cpu().detach()
+            tns = tns.cpu().detach()
+            
+            sensitivity = get_sensitivity(tps,fns)
+            specificity = get_specificity(tns,fps)
+            precision = get_precision(tps,fps)
+            dice = get_dice_score(precision, sensitivity)
+            return sensitivity, specificity, dice
 
 class Segmentor_Z:
     def __init__(
@@ -356,88 +416,36 @@ class Segmentor_Z:
                 pred_volume[:, :, i, :] = p_map
             return pred_volume
 
-class Segmentor_z_v2:
-    def __init__(self, model, optimizer, scheduler, device, scaler):
-        self.model = model
-        self.optimizer = optimizer
-        self.scheduler = scheduler
-        # self.loss_fn = loss_fn
-        self.device = device
-        self.scaler = scaler
-        self.epoch = 0
-        self.class_loss = nn.CrossEntropyLoss()
-
-    def train(self, data_loader):
-        self.model.train()
-        epoch_loss = 0
-        epoch_dice_loss = 0
-        epoch_bce_loss = 0
-        epoch_cls_loss = 0
-        iters = len(data_loader)
-        pbar = tqdm(enumerate(data_loader), total=iters)
-        for step, batch in pbar:
-            self.optimizer.zero_grad()
-            z = batch["z"].to(self.device)
-            inputs = batch["image"].to(self.device, dtype=torch.float)
-            # if BCEwithLogitsLoss,
-            targets = batch["seg"].to(self.device, dtype=torch.float)
-            # if CrossEntropyLoss,
-            # targets = batch['seg'].to(self.device)
-            with amp.autocast():
-                outputs, z_pred = self.model(inputs)
-                loss, bce_loss, dice_loss = cal_loss(outputs, targets)
-                cls_loss = self.class_loss(z_pred, z)
-            combined_loss = loss + cls_loss
-            self.scaler.scale(combined_loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-            self.scheduler.step(self.epoch + step / iters)
-            epoch_loss += loss.item()
-            epoch_dice_loss += dice_loss.item()
-            epoch_bce_loss += bce_loss.item()
-            epoch_cls_loss += cls_loss.item()
-
-            pbar.set_description(
-                f"loss:{loss:.3f}, dice loss:{dice_loss:.3f}, bce loss:{bce_loss:.3f}, cls loss:{cls_loss:.3f}"
-            )
-        return (
-            epoch_loss / iters,
-            epoch_dice_loss / iters,
-            epoch_bce_loss / iters,
-            epoch_cls_loss / iters,
-        )
-
-    def evaluate(self, data_loader):
-        self.model.eval()
-        epoch_loss = 0
-        epoch_dice_loss = 0
-        epoch_bce_loss = 0
-        epoch_cls_loss = 0
+    def get_metrics(self, data_loader):
+        # outputs: [B, C, W, H]
+        # targets: [B, W, H]
         iters = len(data_loader)
         pbar = tqdm(enumerate(data_loader), total=iters)
         with torch.no_grad():
             for step, batch in pbar:
+                inputs = batch["image"].to(self.device)
                 z = batch["z"].to(self.device)
-                inputs = batch["image"].to(self.device, dtype=torch.float)
-                # if BCEwithLogitsLoss,
-                targets = batch["seg"].to(self.device, dtype=torch.float)
-                # if CrossEntropyLoss,
-                # targets = batch['seg'].to(self.device)
-                outputs, z_pred = self.model(inputs)
-                # loss = self.loss_fn(outputs, targets)
-                loss, bce_loss, dice_loss = cal_loss(outputs, targets)
-                cls_loss = self.class_loss(z_pred, z)
-                epoch_loss += loss.item()
-                epoch_dice_loss += dice_loss.item()
-                epoch_bce_loss += bce_loss.item()
-                epoch_cls_loss += cls_loss.item()
+                targets = batch["seg"].to(self.device)
+                outputs = self.model(inputs, z)
+                tp, fp, fn, tn = get_stats(outputs, targets)
+                if step==0:
+                    tps = tp
+                    fps = fp
+                    fns = fn
+                    tns = tn
+                else:
+                    tps += tp
+                    fps += fp
+                    fns += fn
+                    tns += tn
 
-                pbar.set_description(
-                    f"loss:{loss:.3f}, dice loss:{dice_loss:.3f}, bce loss:{bce_loss:.3f}, cls loss:{cls_loss:.3f}"
-                )
-        return (
-            epoch_loss / iters,
-            epoch_dice_loss / iters,
-            epoch_bce_loss / iters,
-            epoch_cls_loss / iters,
-        )
+            tps = tps.cpu().detach()
+            fps = fps.cpu().detach()
+            fns = fns.cpu().detach()
+            tns = tns.cpu().detach()
+            
+            sensitivity = get_sensitivity(tps,fns)
+            specificity = get_specificity(tns,fps)
+            precision = get_precision(tps,fps)
+            dice = get_dice_score(precision, sensitivity)
+            return sensitivity, specificity, dice

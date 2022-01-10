@@ -74,8 +74,8 @@ def wandb_config():
     config.loss = "BCE+Tversky"
     config.combined_loss = True
 
-    # config.learning_rate = 0.0002
-    config.learning_rate = 0.0004
+    config.learning_rate = 0.0002
+    # config.learning_rate = 0.0004
     config.train_bs = 8
     config.valid_bs = 16
     config.num_c = 3
@@ -178,17 +178,17 @@ def main():
         model = ZUNet_v1(in_channels=1, num_c=config.num_c)
         model.to(config.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
-        # scheduler = CosineAnnealingWarmRestarts(
-        #     optimizer, T_0=config.epochs, T_mult=1, eta_min=1e-8, last_epoch=-1
-        # )
-        scheduler = ReduceLROnPlateau(
-            optimizer, factor=0.5, patience=5, verbose=True
+        scheduler = CosineAnnealingWarmRestarts(
+            optimizer, T_0=config.epochs, T_mult=1, eta_min=1e-8, last_epoch=-1
         )
+        # scheduler = ReduceLROnPlateau(
+        #     optimizer, factor=0.5, patience=5, verbose=True
+        # )
         eng = Segmentor_Z(
             model=model,
             optimizer=optimizer,
             loss_fn=criterion,
-            # scheduler=scheduler,
+            scheduler=scheduler,
             device=config.device,
             scaler=scaler,
             combined_loss=config.combined_loss,
@@ -197,17 +197,17 @@ def main():
         model = UNet(in_channel=1, num_c=config.num_c)
         model.to(config.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
-        # scheduler = CosineAnnealingWarmRestarts(
-        #     optimizer, T_0=config.epochs, T_mult=1, eta_min=1e-8, last_epoch=-1
-        # )
-        scheduler = ReduceLROnPlateau(
-            optimizer, factor=0.5, patience=5, verbose=True
+        scheduler = CosineAnnealingWarmRestarts(
+            optimizer, T_0=config.epochs, T_mult=1, eta_min=1e-8, last_epoch=-1
         )
+        # scheduler = ReduceLROnPlateau(
+        #     optimizer, factor=0.5, patience=5, verbose=True
+        # )
         eng = Segmentor(
             model=model,
             optimizer=optimizer,
             loss_fn=criterion,
-            # scheduler=scheduler,
+            scheduler=scheduler,
             device=config.device,
             scaler=scaler,
             combined_loss=config.combined_loss,
