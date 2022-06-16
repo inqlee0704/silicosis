@@ -1,0 +1,11 @@
+nohup: ignoring input
+Save path is  not given, image will be saved in: 
+D:/ENV18PM/ImageData/3-IPF/VIDA_20210104-08_PM_WiM/1139
+Traceback (most recent call last):
+  File "extract_QCT_IN.py", line 163, in <module>
+    main()
+  File "extract_QCT_IN.py", line 123, in main
+    DCMtoVidaCT(subj_path)
+  File "D:\silicosis\utils\DCM2IMG.py", line 37, in DCMtoVidaCT
+    os.chdir(pathImage)
+FileNotFoundError: [WinError 2] The system cannot find the file specified: 'D:/ENV18PM/ImageData/3-IPF/VIDA_20210104-08_PM_WiM/1139'

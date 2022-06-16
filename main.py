@@ -38,7 +38,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 def wandb_config():
     project = "silicosis"
-    run_name = "ZUNet_lung_multiclass_n64"
+    run_name = "UNet_lung_multiclass_n64"
     debug = False
     if debug:
         project = "debug"
@@ -66,7 +66,7 @@ def wandb_config():
 
     # config.mask = 'airway'
     config.mask = "lung"
-    config.model = "ZUNet"
+    config.model = "UNet"
     config.activation = "leakyrelu"
     config.optimizer = "adam"
     # config.scheduler = "CosineAnnealingWarmRestarts"
@@ -80,7 +80,7 @@ def wandb_config():
     config.valid_bs = 16
     config.num_c = 3
     config.aug = True
-    config.Z = True
+    config.Z = False
 
     return config
 
